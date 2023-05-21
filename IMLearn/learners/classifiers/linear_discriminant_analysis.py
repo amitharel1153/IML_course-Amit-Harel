@@ -1,7 +1,9 @@
+import math
 from typing import NoReturn
 from ...base import BaseEstimator
 import numpy as np
 from numpy.linalg import det, inv
+from functools import reduce
 
 
 class LDA(BaseEstimator):
@@ -25,6 +27,7 @@ class LDA(BaseEstimator):
     self.pi_: np.ndarray of shape (n_classes)
         The estimated class probabilities. To be set in `GaussianNaiveBayes.fit`
     """
+
     def __init__(self):
         """
         Instantiate an LDA classifier
@@ -46,7 +49,26 @@ class LDA(BaseEstimator):
         y : ndarray of shape (n_samples, )
             Responses of input data to fit to
         """
-        raise NotImplementedError()
+        self.classes_ = np.unique(y)
+        self.mu_ = []
+        self.pi_ = []
+
+        for k in self.classes_:
+            indexes = [ind for ind in range(y.size) if y[ind] == k]
+            X_k = X[indexes]
+            self.mu_.append(X_k.mean(axis=0))
+            self.pi_.append(len(X_k) / len(X))
+
+        self.mu_ = np.array(self.mu_)
+        self.pi_ = np.array(self.pi_)
+
+        X_minus_mu = X - self.mu_[y.astype(int)]
+        self.cov_ = reduce(np.add, [np.outer(X_minus_mu[i], X_minus_mu[i]) /
+                                    (X.shape[0] - len(self.classes_)) for i in range(len(X_minus_mu))])
+
+        self._cov_inv = np.linalg.inv(self.cov_)
+
+        self.fitted_ = True
 
     def _predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -62,7 +84,7 @@ class LDA(BaseEstimator):
         responses : ndarray of shape (n_samples, )
             Predicted responses of given samples
         """
-        raise NotImplementedError()
+        return self.classes_[np.argmax(self.likelihood(X), axis=1)]
 
     def likelihood(self, X: np.ndarray) -> np.ndarray:
         """
@@ -82,7 +104,16 @@ class LDA(BaseEstimator):
         if not self.fitted_:
             raise ValueError("Estimator must first be fitted before calling `likelihood` function")
 
-        raise NotImplementedError()
+        likelihoods = []
+        for sample in X:
+            like_class = []
+            for k in range(len(self.classes_)):
+                value = math.log(self.pi_[k]) + sample.T @ self._cov_inv @ self.mu_[k] \
+                        - 0.5 * (self.mu_[k] @ self._cov_inv @ self.mu_[k])
+                like_class.append(np.exp(value))
+            likelihoods.append(like_class)
+
+        return np.array(likelihoods)
 
     def _loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """
@@ -102,4 +133,4 @@ class LDA(BaseEstimator):
             Performance under missclassification loss function
         """
         from ...metrics import misclassification_error
-        raise NotImplementedError()
+        return misclassification_error(y, self._predict(X))
