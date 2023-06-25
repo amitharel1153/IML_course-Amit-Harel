@@ -39,6 +39,7 @@ class GradientDescent:
         Callable function receives as input any argument relevant for the current GD iteration. Arguments
         are specified in the `GradientDescent.fit` function
     """
+
     def __init__(self,
                  learning_rate: BaseLR = FixedLR(1e-3),
                  tol: float = 1e-5,
@@ -119,4 +120,60 @@ class GradientDescent:
                 Euclidean norm of w^(t)-w^(t-1)
 
         """
-        raise NotImplementedError()
+        if self.out_type_ == 'last':
+            return self.out_last(f, X, y)
+
+        elif self.out_type_ == 'best':
+            return self.out_best(f, X, y)
+
+        return self.out_avg(f, X, y)
+
+    def out_last(self, f: BaseModule, X: np.ndarray, y: np.ndarray):
+        for t in range(self.max_iter_):
+            eta = self.learning_rate_.lr_step()
+            grad = f.compute_jacobian(X=X, y=y)
+            step = eta * grad
+            f.weights -= step
+            delta = np.sqrt(np.sum(step ** 2))
+            val = f.compute_output(X=X, y=y)
+            self.callback_(solver=self, wgt=f.weights.copy(), val=val, grad=grad, t=t, eta=eta, delta=delta)
+            if delta < self.tol_:
+                break
+
+        return f.weights
+
+    def out_best(self, f: BaseModule, X: np.ndarray, y: np.ndarray):
+        the_best = np.sqrt(np.sum(f.weights ** 2))
+        for t in range(self.max_iter_):
+            eta = self.learning_rate_.lr_step()
+            grad = f.compute_jacobian(X=X, y=y)
+            step = eta * grad
+            f.weights -= step
+            delta = np.sqrt(np.sum(step ** 2))
+            val = f.compute_output(X=X, y=y)
+            self.callback_(solver=self, wgt=f.weights.copy(), val=val, grad=grad, t=t, eta=eta, delta=delta)
+
+            ligma = np.sqrt(np.sum(f.weights ** 2))
+            if ligma < the_best:
+                the_best = ligma
+
+            if delta < self.tol_:
+                break
+
+        return the_best
+
+    def out_avg(self, f: BaseModule, X: np.ndarray, y: np.ndarray):
+        sum_of_weights = f.weights
+        for t in range(self.max_iter_):
+            eta = self.learning_rate_.lr_step()
+            grad = f.compute_jacobian(X=X, y=y)
+            step = eta * grad
+            f.weights -= step
+            sum_of_weights += f.weights
+            delta = np.sqrt(np.sum(step ** 2))
+            val = f.compute_output(X=X, y=y)
+            self.callback_(solver=self, wgt=f.weights.copy(), val=val, grad=grad, t=t, eta=eta, delta=delta)
+            if delta < self.tol_:
+                return sum_of_weights / float(t)
+
+        return sum_of_weights / float(self.max_iter_)
